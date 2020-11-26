@@ -1,51 +1,67 @@
-import { Controller, Post, UseGuards, Res, Request } from '@nestjs/common';
+import { Controller, Post, UseGuards, Req, Res } from '@nestjs/common';
 import { LocalAuthGuard } from './local-auth.guard';
 import { AuthService } from './auth.service';
-import { Response, Request as ReqType } from 'express';
+import { Request as ReqType, Response } from 'express';
 import { User } from '@/users/entities/user.entity';
-import { TokensService } from '@/tokens/tokens.service';
 import { RefreshTokenGuard } from './refresh-token.guard';
-import { Token } from '@/tokens/enities/token.entity';
+import { SignInDto } from './dto/sign-in.dto';
+import { RefreshSessionDto } from './dto/refresh-session.dto';
+import { RefreshSession } from '@/refresh-sessions/enities/refresh-session.entity';
+import { DeviceInfo, TokenPair } from './auth.types';
+import { InjectUser } from './decorators/user.decorator';
+import { InjectDeviceInfo } from './decorators/deviceInfo.decorator';
+import { InjectRefreshSession } from './decorators/refeshSession.decorator';
+import { RefreshSessionsService } from '@/refresh-sessions/refresh-sessions.service';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService, private tokenService: TokensService) {}
+  constructor(private authService: AuthService, private refreshSessionsService: RefreshSessionsService) {}
 
   @UseGuards(LocalAuthGuard)
-  @Post('login')
-  async login(@Request() req: ReqType, @Res() res: Response) {
-    const user = req.user as User;
-    const ip: string = req.ip;
-    const tokenPair = await this.authService.login(user, ip);
+  @Post('signin')
+  async signIn(
+    @InjectUser() user: User,
+    @InjectDeviceInfo() deviceInfo: DeviceInfo,
+    @Req() req: ReqType,
+  ): Promise<TokenPair> {
+    const signInDto: SignInDto = { deviceInfo, user };
+    const tokenPair = await this.authService.signIn(signInDto);
+
     this.authService.setRefreshTokenCookie(
-      res,
-      tokenPair.refresh_token,
-      this.tokenService.getDateByExpiry(tokenPair.refresh_token_expiry),
+      req.res as Response,
+      tokenPair.refreshToken,
+      new Date(tokenPair.refreshTokenExpiresIn),
     );
 
-    res.send({
-      access_token: tokenPair.access_token,
-      access_token_expiry: tokenPair.access_token_expiry,
-    });
+    return tokenPair;
   }
 
   @UseGuards(RefreshTokenGuard)
   @Post('refresh')
-  async refreshToken(@Request() req: ReqType, @Res() res: Response) {
-    const user = req.user as User;
-    const ip: string = req.ip;
-    const refresh_token: Token = req.body.refresh_token;
+  async refreshToken(
+    @InjectUser() user: User,
+    @InjectDeviceInfo() deviceInfo: DeviceInfo,
+    @InjectRefreshSession() session: RefreshSession,
+    @Req() req: ReqType,
+  ): Promise<TokenPair> {
+    const refreshSessionDto: RefreshSessionDto = { deviceInfo, user, session };
+    const tokenPair = await this.authService.refreshSession(refreshSessionDto);
 
-    const tokenPair = await this.authService.refreshTokenPair(refresh_token, user, ip);
     this.authService.setRefreshTokenCookie(
-      res,
-      tokenPair.refresh_token,
-      this.tokenService.getDateByExpiry(tokenPair.refresh_token_expiry),
+      req.res as Response,
+      tokenPair.refreshToken,
+      new Date(tokenPair.refreshTokenExpiresIn),
     );
 
-    res.send({
-      access_token: tokenPair.access_token,
-      access_token_expiry: tokenPair.access_token_expiry,
-    });
+    return tokenPair;
+  }
+
+  @UseGuards(RefreshTokenGuard)
+  @Post('signout')
+  async signOut(@InjectRefreshSession() session: RefreshSession, @Res() res: Response): Promise<void> {
+    // Очищаем refresh куку
+    this.authService.setRefreshTokenCookie(res, '', new Date(0));
+    await this.refreshSessionsService.delete(session);
+    res.send();
   }
 }

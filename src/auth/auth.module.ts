@@ -6,24 +6,17 @@ import { LocalStrategy } from './local.strategy';
 import { AuthController } from './auth.controller';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './jwt.strategy';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TokensModule } from '@/tokens/tokens.module';
+import { ConfigModule } from '@nestjs/config';
+import { RefreshSessionsModule } from '@/refresh-sessions/refresh-sessions.module';
+import { jwtConfig } from '@/config/jwt.config';
 
 @Module({
   imports: [
     ConfigModule,
-
-    JwtModule.registerAsync({
-      imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        secret: configService.get('auth.jwt_secret'),
-      }),
-      inject: [ConfigService],
-    }),
-
+    JwtModule.registerAsync(jwtConfig),
     UsersModule,
     PassportModule,
-    TokensModule,
+    RefreshSessionsModule,
   ],
   providers: [AuthService, LocalStrategy, JwtStrategy],
   controllers: [AuthController],

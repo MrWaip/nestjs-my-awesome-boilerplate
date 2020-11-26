@@ -1,3 +1,5 @@
+import { RefreshSession } from '@/refresh-sessions/enities/refresh-session.entity';
+import { Role } from '@/roles/role.entity';
 import {
   Entity,
   Column,
@@ -9,12 +11,11 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { Token } from '../../tokens/enities/token.entity';
 
 @Entity({ name: 'users' })
 export class User {
   @PrimaryGeneratedColumn('uuid')
-  id: number;
+  id: string;
 
   @Column('text', { unique: true })
   email: string;
@@ -41,24 +42,28 @@ export class User {
   created_at: Date;
 
   @UpdateDateColumn({ type: 'timestamptz' })
-  updated_at: Date;
+  updated_at?: Date;
 
   @DeleteDateColumn({ type: 'timestamptz' })
-  deleted_at: Date;
+  deleted_at?: Date;
 
   @OneToMany(
-    () => Token,
-    token => token.user,
+    () => RefreshSession,
+    session => session.user,
   )
-  refresh_tokens: Token[];
+  refresh_sessions: RefreshSession[];
 
   @ManyToOne(() => User, { nullable: true })
   @JoinColumn({ name: 'deleted_by' })
-  deleted_by: User;
+  deleted_by?: User;
 
   @ManyToOne(() => User, { nullable: true })
   @JoinColumn({ name: 'created_by' })
-  created_by: User;
+  created_by?: User;
+
+  @ManyToOne(() => Role, { nullable: true })
+  @JoinColumn({ name: 'role_id' })
+  role?: Role;
 
   public constructor(init?: Partial<User>) {
     Object.assign(this, init);

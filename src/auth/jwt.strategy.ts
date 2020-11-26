@@ -2,13 +2,13 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { UsersService } from '@/users/users.service';
 import { InvalidAccessTokenPayload } from '@/auth/auth.exceptions';
 import { UUIDv4 } from 'uuid-v4-validator';
+import { AccessTokenPayload, UserInfo } from './auth.types';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private userService: UsersService, configService: ConfigService) {
+  constructor(configService: ConfigService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -16,13 +16,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate({ sub }: any) {
+  async validate({ sub }: AccessTokenPayload): Promise<UserInfo> {
     const isValidUUID = UUIDv4.validate(sub);
     if (!isValidUUID) throw new InvalidAccessTokenPayload();
 
-    const user = this.userService.findById(sub);
-    if (!user) throw new InvalidAccessTokenPayload();
-
-    return user;
+    return { userId: sub };
   }
 }

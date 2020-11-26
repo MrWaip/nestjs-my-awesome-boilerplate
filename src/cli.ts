@@ -7,7 +7,7 @@ import { CliModule } from './cli/cli.module';
   const logArgIndex = process.argv.findIndex(i => i === '--log');
   if (logArgIndex >= 0) {
     process.argv.splice(logArgIndex, 1);
-    logger = undefined;
+    logger = false;
   }
 
   const app = await NestFactory.createApplicationContext(CliModule, { logger });

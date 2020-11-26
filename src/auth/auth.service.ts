@@ -1,27 +1,30 @@
 import { Response } from 'express';
 import { PRODUCTION } from './../common/constants';
-import { REFRESH_TOKEN_COOKIE } from './constants';
+import { DEFAULT_ACCESS_TOKEN_TTL, REFRESH_TOKEN_COOKIE } from './constants';
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '@/users/users.service';
 import { User } from '@/users/entities/user.entity';
-import { TokensService } from '@/tokens/tokens.service';
-import { TokenPair } from './types';
-import { Token } from '@/tokens/enities/token.entity';
+import { RefreshSessionsService } from '@/refresh-sessions/refresh-sessions.service';
+import { AccessTokenPayload, AccessToken, TokenPair } from './auth.types';
 import { ConfigService } from '@nestjs/config';
 import { AuthConfig } from '@/config/types';
 import * as bcrypt from 'bcrypt';
+import { SignInDto } from './dto/sign-in.dto';
+import { DateTime } from 'luxon';
+import { CreateTokenPairDto } from './dto/create-token-pair.dto';
+import { RefreshSessionDto } from './dto/refresh-session.dto';
 
 @Injectable()
 export class AuthService {
   constructor(
     private usersService: UsersService,
-    private tokenService: TokensService,
+    private refreshSessionsService: RefreshSessionsService,
     private jwtService: JwtService,
     private configService: ConfigService,
   ) {}
 
-  async validateUser(email: string, pwd: string): Promise<User> {
+  async validateUser(email: string, pwd: string): Promise<User | null> {
     const user = await this.usersService.findByEmail(email);
     if (user && (await bcrypt.compare(pwd, user.password))) {
       return user;
@@ -29,55 +32,47 @@ export class AuthService {
     return null;
   }
 
-  async login(user: User, ip: string): Promise<TokenPair> {
-    const tokenPair = this.createTokenPair(user);
-
-    await this.tokenService.saveRefreshToken({
-      expiry: tokenPair.refresh_token_expiry,
-      user_id: user.id,
-      value: tokenPair.refresh_token,
-      ip,
+  async signIn({ user, deviceInfo }: SignInDto): Promise<TokenPair> {
+    return await this.createTokenPair({
+      deviceInfo,
+      user,
     });
-
-    return tokenPair;
   }
 
-  createTokenPair(user: User): TokenPair {
-    const payload = { sub: user.id };
-    const { refresh_expiry, access_expiry } = this.configService.get<AuthConfig>('auth');
-
-    const access_token = this.jwtService.sign(payload, {
-      expiresIn: access_expiry,
+  async createTokenPair({ deviceInfo, user }: CreateTokenPairDto): Promise<TokenPair> {
+    const refreshSession = await this.refreshSessionsService.createRefreshSession({
+      deviceInfo,
+      userId: user.id,
     });
 
-    const refresh_token = this.jwtService.sign(payload, {
-      expiresIn: refresh_expiry,
-    });
+    const accessToken = this.createAccessToken(user);
+
+    await this.refreshSessionsService.validateUserSessions(user.id);
 
     return {
-      access_token,
-      refresh_token,
-      access_token_expiry: access_expiry,
-      refresh_token_expiry: refresh_expiry,
+      accessToken: accessToken.token,
+      accessTokenExpiresIn: accessToken.expiresIn.toMillis(),
+      refreshToken: refreshSession.refresh_token,
+      refreshTokenExpiresIn: refreshSession.expires_in,
     };
   }
 
-  /**
-   * Создание новой пары токенов, через refresh_token
-   * @param token - Refresh token используемый для создания новой пары токенов
-   * @param ip  - IP с которого поступил запрос
-   */
-  async refreshTokenPair(token: Token, user: User, ip: string) {
-    const tokenPair = this.createTokenPair(user);
+  createAccessToken(user: User): AccessToken {
+    const payload: AccessTokenPayload = { sub: user.id };
+    const accessTtl =
+      this.configService.get<AuthConfig>('auth')?.access_token_ttl || DEFAULT_ACCESS_TOKEN_TTL;
 
-    await this.tokenService.delete(token);
+    const token = this.jwtService.sign(payload, { expiresIn: accessTtl });
+    const expiresIn = DateTime.local().plus({ seconds: accessTtl });
 
-    await this.tokenService.saveRefreshToken({
-      expiry: tokenPair.refresh_token_expiry,
-      user_id: user.id,
-      value: tokenPair.refresh_token,
-      ip,
-    });
+    return { token, expiresIn };
+  }
+
+  async refreshSession(refreshSessionDto: RefreshSessionDto): Promise<TokenPair> {
+    const { deviceInfo, session, user } = refreshSessionDto;
+
+    await this.refreshSessionsService.delete(session);
+    const tokenPair = await this.createTokenPair({ deviceInfo, user });
 
     return tokenPair;
   }

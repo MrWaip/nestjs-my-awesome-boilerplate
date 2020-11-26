@@ -2,13 +2,19 @@ import { ForbiddenException } from '@nestjs/common';
 
 export class RefreshTokenNotRecognizedException extends ForbiddenException {
   constructor() {
-    super(`Refresh token not recognized`);
+    super(`errors.refreshTokenNotRecognized`);
   }
 }
 
 export class InvalidRefreshTokenException extends ForbiddenException {
   constructor() {
     super(`Refresh token is invalid`);
+  }
+}
+
+export class RefreshTokenExpiredException extends ForbiddenException {
+  constructor() {
+    super(`Refresh token expired`);
   }
 }
 

@@ -1,3 +1,3 @@
-import { getConnections } from './src/database/connections';
+import { getDefaultConnectionConfig } from '@/config/typeorm.config';
 
-export = getConnections();
+export = [getDefaultConnectionConfig()];

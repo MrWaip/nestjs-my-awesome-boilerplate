@@ -1,5 +1,6 @@
 export type AuthConfig = {
   jwt_secret: string;
-  refresh_expiry: number;
-  access_expiry: number;
+  refresh_token_ttl: number;
+  access_token_ttl: number;
+  refresh_sessions_count: number;
 };

@@ -1,38 +1,36 @@
 import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { Request } from 'express';
 import {
   RefreshTokenNotRecognizedException,
   InvalidRefreshTokenException,
   UnknownRefreshTokenException,
+  RefreshTokenExpiredException,
 } from './auth.exceptions';
-import { TokensService } from '@/tokens/tokens.service';
+import { RefreshSessionsService } from '@/refresh-sessions/refresh-sessions.service';
+import { Request } from 'express';
 import { REFRESH_TOKEN_COOKIE } from './constants';
+import { UUIDv4 } from 'uuid-v4-validator';
 
 @Injectable()
 export class RefreshTokenGuard implements CanActivate {
-  constructor(private jwtService: JwtService, private tokenService: TokensService) {}
+  constructor(private refreshSessionService: RefreshSessionsService) {}
 
   async canActivate(ctx: ExecutionContext) {
     const req: Request = ctx.switchToHttp().getRequest();
 
-    const refresh_token: string = req.cookies[REFRESH_TOKEN_COOKIE] ?? req.body['refresh_token'];
+    const refreshToken: string = req.cookies[REFRESH_TOKEN_COOKIE] ?? req.body['refreshToken'];
 
-    if (!refresh_token) throw new RefreshTokenNotRecognizedException();
+    if (!refreshToken) throw new RefreshTokenNotRecognizedException();
 
-    try {
-      this.jwtService.verify(refresh_token);
-    } catch (error) {
-      throw new InvalidRefreshTokenException();
-    }
+    if (!UUIDv4.validate(refreshToken)) throw new InvalidRefreshTokenException();
 
-    const token = await this.tokenService.findByValue(refresh_token);
+    const session = await this.refreshSessionService.findByRefreshToken(refreshToken);
 
-    if (!token) throw new UnknownRefreshTokenException();
+    if (!session) throw new UnknownRefreshTokenException();
 
-    req.user = token.user;
-    token.user = null;
-    req.body.refresh_token = token;
+    if (new Date(session.expires_in) < new Date()) throw new RefreshTokenExpiredException();
+
+    req.user = session.user;
+    req.body.refresh_session = session;
 
     return true;
   }

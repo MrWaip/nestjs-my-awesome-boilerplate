@@ -16,6 +16,7 @@ export class CreateUsersTable1601303761933 implements MigrationInterface {
           {
             name: 'email',
             type: 'text',
+            isUnique: true,
           },
           {
             name: 'lname',
@@ -90,6 +91,29 @@ export class CreateUsersTable1601303761933 implements MigrationInterface {
         ],
       }),
     );
+
+    await queryRunner.query(`
+      CREATE OR REPLACE FUNCTION get_user_fullname(p_user_id uuid)
+        RETURNS text
+        LANGUAGE plpgsql
+      AS 
+      $function$
+          declare
+              l_result text;
+          begin
+            
+          IF p_user_id is null THEN
+              return null;
+            END IF;
+            
+              select  u.lname || ' ' || u.fname || ' ' || coalesce(u.mname, '') into l_result from users u
+                  where u.id = p_user_id::uuid;
+              
+              return coalesce(l_result, null);
+          end;
+              
+      $function$;   
+    `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
